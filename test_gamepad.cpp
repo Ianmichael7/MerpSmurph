@@ -3,6 +3,8 @@
 #include <fstream>
 #include <string>
 #include <streambuf>
+#include <ctime>
+#include <direct.h>
 #include "gamepad.h"
 using namespace std;
 
@@ -80,6 +82,19 @@ public:
 class prgm
 {
 private:
+	/* -------Time Data-------*/
+	time_t now = time(0);
+	tm *tme = localtime(&now);
+	int year = 1900 + tme->tm_year;
+	int month = 1 + tme->tm_mon;
+	int day = tme->tm_mday;
+	int hour = tme->tm_hour;
+	int min = tme->tm_min;
+
+	int lastSec = 60;
+
+	string dte = to_string(hour) + "-" + to_string(min) + "-" + to_string(month) + "-" + to_string(day) + "-" + to_string(year);
+
 	/* -------Telemetry Data------- */
 	double altitude = 0.0;
 	double speed = 0.0;
@@ -215,17 +230,27 @@ private:
 	*/
 	bool printTelemetry()
 	{
-		lf.open("C:\\Users\\Ian\\Downloads\\example.txt");
-		lf << "Altitude: " << altitude 
-			<< ",Speed: " << speed 
-			<< ",Gyro X-Axis: " << gyroX 
-			<< ",Gyro Y-Axis: " << gyroY 
-			<< ",Gyro Z-Axis: " << gyroZ 
-			<< ",U Sensor 1: " << sensor1 
-			<< ",U Sensor 2: " << sensor2 
-			<< ",U Sensor 3: " << sensor3 
-			<< ",U Sensor 4: " << sensor4 
-			<< "\n" << endl;
+		time_t n = time(0);
+		tm *t = localtime(&n);
+		int y = 1900 + t->tm_year;
+		int m = 1 + t->tm_mon;
+		int d = t->tm_mday;
+		int h = t->tm_hour;
+		int mi = t->tm_min;
+		int s = t->tm_sec;
+
+		lf.open(".\\log\\HOPPS_" + dte + ".csv", ios::out | ios::app);
+		lf << " Date:" << m << "/" << d << "/" << y << ",Time-" << h << ":" << mi << ":" << s
+			<< ",Altitude:" << altitude 
+			<< ",Speed:" << speed 
+			<< ",Gyro X-Axis:" << gyroX 
+			<< ",Gyro Y-Axis:" << gyroY 
+			<< ",Gyro Z-Axis:" << gyroZ 
+			<< ",U Sensor 1:" << sensor1 
+			<< ",U Sensor 2:" << sensor2 
+			<< ",U Sensor 3:" << sensor3 
+			<< ",U Sensor 4:" << sensor4 
+			<< endl;
 		lf.close();
 		return true;
 	}
@@ -294,7 +319,14 @@ public:
 	*/
 	void uInputHandler()
 	{
-		printTelemetry();
+		//Print to the log every 5 seconds
+		time_t n = time(0);
+		tm *t = localtime(&n);
+		if (t->tm_sec != lastSec && t->tm_sec % 5 == 0)
+		{
+			printTelemetry();
+			lastSec = t->tm_sec;
+		}
 		return;
 	}
 
@@ -365,6 +397,9 @@ public:
 int main()
 {
 	prgm m;
+
+	//Make log directory
+	mkdir(".\\log");
 
 	// Wait for gamepad to be connected
 	while (!gamepad.connected())
