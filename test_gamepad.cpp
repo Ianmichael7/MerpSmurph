@@ -1,7 +1,10 @@
-#include <windows.h>
-#include <iostream>
 #include "stdafx.h"
+#include <windows.h>
+#include <fstream>
+#include <string>
+#include <streambuf>
 #include "gamepad.h"
+using namespace std;
 
 /* ----------- uDataInput -----------
 //Description: Data structure that handles queuing input system data from UAS to be sent off to specified function
@@ -17,7 +20,7 @@ struct uDataInput
 {
 	int fSys;
 	int sData;
-	std::string sDataS;
+	string sDataS;
 };
 
 /* ----------- uDataOutput -----------
@@ -37,8 +40,10 @@ struct uDataOutput
 	int uData;
 };
 
+//GLOBAL VARIABLES
 bool debug = true;
 Gamepad gamepad;
+ifstream istrm("blah.txt", ios::binary);
 
 class gui
 {
@@ -75,23 +80,31 @@ public:
 class prgm
 {
 private:
+	/* -------Telemetry Data------- */
+	double altitude = 0.0;
+	double speed = 0.0;
+	double gyroX = 0.0;
+	double gyroY = 0.0;
+	double gyroZ = 0.0;
+	double sensor1 = 0.0;
+	double sensor2 = 0.0;
+	double sensor3 = 0.0;
+	double sensor4 = 0.0;
+
+	/* -------File Stream------- */
+	ofstream lf;
+
 	/* ----------- prnt -----------
 	//Description: Function that loops through watching for controller input to push mapped controls to a queue
 	//
 	//Inputs:
-	//cmdln(int) = which command line we are outputting to
-	//		1 = cout (beta testing)
-	//		2 = ROS Internal cmd
-	//
 	//opt(string) = string to be sent to specified command line
 	//
 	//Outputs: Print Line
 	*/
-	void prnt(int cmdln, std::string opt)
+	void prnt(string opt)
 	{
-		if (cmdln == 1) std::cout << opt.c_str() << std::endl;
-		else if (cmdln == 2) std::cout << opt.c_str() << std::endl;
-		else std::cout << "Unkn output" << std::endl;
+		cout << opt.c_str() << endl;
 	}
 
 	/* ----------- uOutputHandler -----------
@@ -202,6 +215,18 @@ private:
 	*/
 	bool printTelemetry()
 	{
+		lf.open("C:\\Users\\Ian\\Downloads\\example.txt");
+		lf << "Altitude: " << altitude 
+			<< ",Speed: " << speed 
+			<< ",Gyro X-Axis: " << gyroX 
+			<< ",Gyro Y-Axis: " << gyroY 
+			<< ",Gyro Z-Axis: " << gyroZ 
+			<< ",U Sensor 1: " << sensor1 
+			<< ",U Sensor 2: " << sensor2 
+			<< ",U Sensor 3: " << sensor3 
+			<< ",U Sensor 4: " << sensor4 
+			<< "\n" << endl;
+		lf.close();
 		return true;
 	}
 
@@ -269,6 +294,7 @@ public:
 	*/
 	void uInputHandler()
 	{
+		printTelemetry();
 		return;
 	}
 
@@ -281,34 +307,34 @@ public:
 	*/
 	void controllerHandler()
 	{
-		if (debug) std::cout << "Gamepad state has changed" << std::endl;
+		if (debug) cout << "Gamepad state has changed" << endl;
 
 		// Print out states of left thumbstick
 		if (!gamepad.leftStickInDeadzone())
 		{
-			if (debug) std::cout << "Left thumbstick x: " << gamepad.leftStick_x() << std::endl;
-			if (debug) std::cout << "Left thumbstick y: " << gamepad.leftStick_y() << std::endl;
+			if (debug) cout << "Left thumbstick x: " << gamepad.leftStick_x() << endl;
+			if (debug) cout << "Left thumbstick y: " << gamepad.leftStick_y() << endl;
 			fSystemController(0, 0, gamepad.leftStick_x(), gamepad.leftStick_y());
 		}
 		else
-			if (debug) std::cout << "Left thumbstick in deadzone" << std::endl;
+			if (debug) cout << "Left thumbstick in deadzone" << endl;
 
 		// Print out states of right thumbstick
 		if (!gamepad.rightStickInDeadzone())
 		{
-			if (debug) std::cout << "Right thumbstick x: " << gamepad.rightStick_x() << std::endl;
-			if (debug) std::cout << "Right thumbstick y: " << gamepad.rightStick_y() << std::endl;
+			if (debug) cout << "Right thumbstick x: " << gamepad.rightStick_x() << endl;
+			if (debug) cout << "Right thumbstick y: " << gamepad.rightStick_y() << endl;
 			
 			if (gamepad.rightStick_y() > 0) mSystemGimble(1, gamepad.rightStick_y());
 			else if (gamepad.rightStick_y() < 0) mSystemGimble(0, -1 * gamepad.rightStick_y());
 			fSystemController(2, 0, gamepad.rightStick_x(), 0);
 		}
 		else
-			if (debug) std::cout << "Right thumbstick in deadzone" << std::endl;
+			if (debug) cout << "Right thumbstick in deadzone" << endl;
 
 		// Print out states of triggers
-		if (debug) std::cout << "Left trigger: " << gamepad.leftTrigger() << std::endl;
-		if (debug) std::cout << "Right trigger: " << gamepad.rightTrigger() << std::endl;
+		if (debug) cout << "Left trigger: " << gamepad.leftTrigger() << endl;
+		if (debug) cout << "Right trigger: " << gamepad.rightTrigger() << endl;
 		double intensity = 0 + gamepad.rightTrigger() - gamepad.leftTrigger();
 		fSystemController(1, intensity, 0, 0);
 
@@ -316,7 +342,7 @@ public:
 		for (int i = 0; i < 14; i++)
 		{
 			int iValue = (gamepad.getButtonPressed(i) ? 1 : 0);
-			if (debug) std::cout << "Button ID " << i << ": " << iValue << std::endl;
+			if (debug) cout << "Button ID " << i << ": " << iValue << endl;
 			if (iValue == 1)
 			{
 				if (i == 0) mSystemTalon(0); //a
@@ -343,17 +369,17 @@ int main()
 	// Wait for gamepad to be connected
 	while (!gamepad.connected())
 	{
-		std::cout << "Gamepad Not Connected..." << std::endl;
+		cout << "Gamepad Not Connected..." << endl;
 		Sleep(1000);
 	}
 
 	while (false)
 	{
-		std::cout << "UAS Not Connected..." << std::endl;
+		cout << "UAS Not Connected..." << endl;
 		Sleep(1000);
 	}
 
-	if (debug) std::cout << "Gamepad " << gamepad.getIndex() << " connected" << std::endl;
+	if (debug) cout << "Gamepad " << gamepad.getIndex() << " connected" << endl;
 
 	// Main loop
 	while (true)
