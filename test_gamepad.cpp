@@ -111,28 +111,15 @@ private:
 	/* ----Telemetry Modifiers--- */
 	bool tempMod = false; //false = Celcius, true = Farhrenheit
 	bool altMod = false; //false = Feet, true = Meters
-	string spForm = "t";
+	string spForm = "s";
 	string altForm = "a";
 
 	/* -------Modified Telemetry------- */
-	double altitudeM = altitude;
-	double speedM = speed;
+	double altitudeM = 0.0;
+	double speedM = 0.0;
 
 	/* -------File Stream------- */
 	ofstream lf;
-
-	/* ----------- prnt -----------
-	//Description: Function that loops through watching for controller input to push mapped controls to a queue
-	//
-	//Inputs:
-	//opt(string) = string to be sent to specified command line
-	//
-	//Outputs: Print Line
-	*/
-	void prnt(string opt)
-	{
-		cout << opt.c_str() << endl;
-	}
 
 	/* ----------- uOutputHandler -----------
 	//Description: Function that pushes out commands to UAS over both bluetooth and flight wireless signals
@@ -282,6 +269,132 @@ private:
 		return true;
 	}
 
+	/* ----------- telemetryModParser -----------
+	//Description: Function that applies user-specified changhes to telemetry
+	//
+	//Inputs: fm (string) = string representing modification formula to variable
+	//
+	//Outputs:
+	// double = formula applied to variable
+	*/
+	double telemetryModParser(string fm)
+	{
+		double v1 = 0;
+		double v2 = 0;
+		char op1 = '+';
+		char op2 = ' ';
+		int pos = 0;
+		string cur = "";
+
+		while (pos != fm.length())
+		{
+			while (fm[pos] != '*' && fm[pos] != '/' && pos != fm.length())
+			{
+				while (fm[pos] != '+' && fm[pos] != '-' && fm[pos] != '*' && fm[pos] != '/' && pos != fm.length())
+				{
+					if (fm[pos] == 'a' && op1 == '+') v1 += altitude;
+					else if (fm[pos] == 's' && op1 == '+') v1 += speed;
+					else if (fm[pos] == 'a' && op1 == '-') v1 -= altitude;
+					else if (fm[pos] == 's' && op1 == '-') v1 -= speed;
+					else
+					{
+						cur += fm[pos];
+
+						if (pos == fm.length() - 1 || (pos != fm.length() - 1 && (fm[pos + 1] == '*' ||
+							fm[pos + 1] == '/' || fm[pos + 1] == '+' || fm[pos + 1] == '-')))
+						{
+							if (op1 == '+') v1 += stod(cur);
+							else if (op1 == '-') v1 -= stod(cur);
+							cur = "";
+						}
+					}
+					pos++;
+				}
+				if (pos != fm.length() && fm[pos] == '+')
+				{
+					op1 = '+';
+					pos++;
+				}
+				else if (pos != fm.length() && fm[pos] == '-')
+				{
+					op1 = '-';
+					pos++;
+				}
+			}
+
+			op1 = '+';
+
+			if (pos != fm.length() && fm[pos] == '*')
+			{
+				op2 = '*';
+				pos++;
+			}
+			else if (pos != fm.length() && fm[pos] == '/')
+			{
+				op2 = '/';
+				pos++;
+			}
+
+			while (pos != fm.length())
+			{
+				while (pos != fm.length() && fm[pos] != '+' && fm[pos] != '-' && fm[pos] != '*' && fm[pos] != '/')
+				{
+					if (fm[pos] == 'a' && op1 == '+') v2 += altitude;
+					else if (fm[pos] == 's' && op1 == '+') v2 += speed;
+					else if (fm[pos] == 'a' && op1 == '-') v2 -= altitude;
+					else if (fm[pos] == 's' && op1 == '-') v2 -= speed;
+					else
+					{
+						cur += fm[pos];
+
+						if (pos == fm.length() - 1 || (pos != fm.length() - 1 && (fm[pos + 1] == '*' ||
+							fm[pos + 1] == '/' || fm[pos + 1] == '+' || fm[pos + 1] == '-')))
+						{
+							if (op1 == '+') v2 += stod(cur);
+							else if (op1 == '-') v2 -= stod(cur);
+							cur = "";
+						}
+					}
+					pos++;
+				}
+				if (pos != fm.length() && fm[pos] == '+')
+				{
+					op1 = '+';
+					pos++;
+				}
+				else if (pos != fm.length() && fm[pos] == '-')
+				{
+					op1 = '-';
+					pos++;
+				}
+				else if (pos != fm.length() && fm[pos] == '*')
+				{
+					if (op2 == '*') v1 = v1 * v2;
+					else if (op2 == '/') v1 = v1 / v2;
+					v2 = 0;
+					op1 = '+';
+					op2 = '*';
+					pos++;
+				}
+				else if (pos != fm.length() && fm[pos] == '/')
+				{
+					if (op2 == '*') v1 = v1 * v2;
+					else if (op2 == '/') v1 = v1 / v2;
+					v2 = 0;
+					op1 = '+';
+					op2 = '/';
+					pos++;
+				}
+				else if (pos == fm.length())
+				{
+					if (op2 == '*') v1 = v1 * v2;
+					else if (op2 == '/') v1 = v1 / v2;
+				}
+			}
+		}
+		return v1;
+	}
+
 	/* ----------- editTelemetry -----------
 	//Description: Function that applies user-specified changhes to telemetry
 	//
@@ -294,126 +407,11 @@ private:
 	{
 		//altitude
 		if (altForm == "a") altitudeM = altitude;
-		else
-		{
-			double v1 = 0;
-			double v2 = 0;
-			char op1 = '+';
-			char op2 = ' ';
-			int pos = 0;
-			string cur = "";
-
-			while (pos != altForm.length())
-			{
-				while (altForm[pos] != '*' && altForm[pos] != '/' && pos != altForm.length())
-				{
-					while (altForm[pos] != '+' && altForm[pos] != '-' && altForm[pos] != '*' && altForm[pos] != '/' && pos != altForm.length())
-					{
-						if (altForm[pos] == 'a' && op1 == '+') v1 += altitude;
-						else if (altForm[pos] == 's' && op1 == '+') v1 += speed;
-						else if (altForm[pos] == 'a' && op1 == '-') v1 -= altitude;
-						else if (altForm[pos] == 's' && op1 == '-') v1 -= speed;
-						else
-						{
-							cur += altForm[pos];
-
-							if (pos == altForm.length() - 1 || (pos != altForm.length() - 1 && (altForm[pos + 1] == '*' ||
-								altForm[pos + 1] == '/' || altForm[pos + 1] == '+' || altForm[pos + 1] == '-')))
-							{
-								if (op1 == '+') v1 += stod(cur);
-								else if (op1 == '-') v1 -= stod(cur);
-								cur = "";
-							}
-						}
-						pos++;
-					}
-					if (pos != altForm.length() && altForm[pos] == '+')
-					{
-						op1 = '+';
-						pos++;
-					}
-					else if (pos != altForm.length() && altForm[pos] == '-')
-					{
-						op1 = '-';
-						pos++;
-					}
-				}
-
-				op1 = '+';
-
-				if (pos != altForm.length() && altForm[pos] == '*')
-				{
-					op2 = '*';
-					pos++;
-				}
-				else if (pos != altForm.length() && altForm[pos] == '/')
-				{
-					op2 = '/';
-					pos++;
-				}
-
-				while (pos != altForm.length())
-				{
-					while (pos != altForm.length() && altForm[pos] != '+' && altForm[pos] != '-' && altForm[pos] != '*' && altForm[pos] != '/')
-					{
-						if (altForm[pos] == 'a' && op1 == '+') v2 += altitude;
-						else if (altForm[pos] == 's' && op1 == '+') v2 += speed;
-						else if (altForm[pos] == 'a' && op1 == '-') v2 -= altitude;
-						else if (altForm[pos] == 's' && op1 == '-') v2 -= speed;
-						else
-						{
-							cur += altForm[pos];
-
-							if (pos == altForm.length() - 1 || (pos != altForm.length() - 1 && (altForm[pos + 1] == '*' ||
-								altForm[pos + 1] == '/' || altForm[pos + 1] == '+' || altForm[pos + 1] == '-')))
-							{
-								if (op1 == '+') v2 += stod(cur);
-								else if (op1 == '-') v2 -= stod(cur);
-								cur = "";
-							}
-						}
-						pos++;
-					}
-					if (pos != altForm.length() && altForm[pos] == '+')
-					{
-						op1 = '+';
-						pos++;
-					}
-					else if (pos != altForm.length() && altForm[pos] == '-')
-					{
-						op1 = '-';
-						pos++;
-					}
-					else if (pos != altForm.length() && altForm[pos] == '*')
-					{
-						if (op2 == '*') v1 = v1 * v2;
-						else if (op2 == '/') v1 = v1 / v2;
-						v2 = 0;
-						op1 = '+';
-						op2 = '*';
-						pos++;
-					}
-					else if (pos != altForm.length() && altForm[pos] == '/')
-					{
-						if (op2 == '*') v1 = v1 * v2;
-						else if (op2 == '/') v1 = v1 / v2;
-						v2 = 0;
-						op1 = '+';
-						op2 = '/';
-						pos++;
-					}
-					else if (pos == altForm.length())
-					{
-						if (op2 == '*') v1 = v1 * v2;
-						else if (op2 == '/') v1 = v1 / v2;
-					}
-				}
-			}
-			altitudeM = v1;
-		}
+		else altitudeM = telemetryModParser(altForm);
 
 		//speed
 		if (spForm == "s") speedM = speed;
+		else speedM = telemetryModParser(spForm);
 
 		return true;
 	}
