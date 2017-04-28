@@ -5,6 +5,7 @@
 #include <streambuf>
 #include <ctime>
 #include <direct.h>
+#include <algorithm>
 #include "gamepad.h"
 using namespace std;
 
@@ -43,7 +44,7 @@ struct uDataOutput
 };
 
 //GLOBAL VARIABLES
-bool debug = true;
+bool debug = false;
 Gamepad gamepad;
 ifstream istrm("blah.txt", ios::binary);
 
@@ -97,6 +98,7 @@ private:
 
 	/* -------Telemetry Data------- */
 	double altitude = 0.0;
+	double temp = 0.0;
 	double speed = 0.0;
 	double gyroX = 0.0;
 	double gyroY = 0.0;
@@ -105,6 +107,12 @@ private:
 	double sensor2 = 0.0;
 	double sensor3 = 0.0;
 	double sensor4 = 0.0;
+
+	/* ----Telemetry Modifiers--- */
+	bool tempMod = false; //false = Celcius, true = Farhrenheit
+	bool altMod = false; //false = Feet, true = Meters
+	string spForm = "t";
+	string altForm = "a";
 
 	/* -------File Stream------- */
 	ofstream lf;
@@ -268,6 +276,172 @@ private:
 		return true;
 	}
 
+	/* ----------- editTelemetry -----------
+	//Description: Function that allows user to specify commands in the command prompt to change telemetry modifications
+	//
+	//Inputs: N/A
+	//
+	//Outputs:
+	// bool = complete(0=n, 1=y)
+	*/
+	bool editTelemetryFormulas()
+	{
+		string ipt;
+		string allowed = "as01234567890+-*/";
+		bool cont = true;
+		cout << "\nWelcome to command line, type 'help' for a guide on how to use the command line. Type 'exit' to exit out of command line to resume normal operation." << endl;
+
+		while (cont)
+		{
+
+			getline(cin, ipt);
+
+			//erase spaces for ease of reading
+			ipt.erase(remove(ipt.begin(), ipt.end(), '_'), ipt.end());
+
+			//turn everything to lowercase
+			transform(ipt.begin(), ipt.end(), ipt.begin(), ::tolower);
+
+			if (ipt == "")
+			{
+				cout << "Type 'help' for a guide on how to use the command line." << endl;
+				cont = true;
+			}
+			else if (ipt == "exit")
+			{
+				cout << "Command line closed, please return to ROS Graphical window." << endl;
+				cont = false;
+			}
+			else if (ipt == "help")
+			{
+				cout << "\nType 'exit' to exit command line." << endl;
+				cout << "Type 'celsius' to change to celsius tempurature readings." << endl;
+				cout << "Type 'fahrenheit' to change to fahrenheit tempurature readings." << endl;
+				cout << "Type 'meters' to change to meters altitude readings." << endl;
+				cout << "Type 'feet' to change to feet altitude readings." << endl;
+				cout << "\nTo change telemetry forumlas, use complete forumlas such as 'x = x * 10'" << endl;
+				cout << "Variables to change:\n 'a' = altitude\n 's' = speed" << endl;
+				cont = true;
+			}
+			else if (ipt == "celsius")
+			{
+				cout << "Temp forumla changed to Celsius. Now exiting to ROS Screen..." << endl;
+				tempMod = false;
+				cont = false;
+			}
+			else if (ipt == "fahrenheit")
+			{
+				cout << "Temp forumla changed to Fahrenheit. Now exiting to ROS Screen..." << endl;
+				tempMod = true;
+				cont = false;
+			}
+			else if (ipt == "feet")
+			{
+				cout << "Altitude formula changed to Feet. Now exiting to ROS Screen..." << endl;
+				altMod = false;
+				cont = false;
+			}
+			else if (ipt == "meters")
+			{
+				cout << "Altitude changed to Meters. Now exiting to ROS Screen..." << endl;
+				altMod = true;
+				cont = false;
+			}
+			else
+			{
+				bool modified = false; //false = speed, true = altitude
+				bool readable = true;
+
+				string form = ""; // formula
+
+				if (ipt[0] == 'a' && ipt[1] == '=' && ipt.length() > 2) modified = true;
+				else if (ipt[0] == 's' && ipt[1] == '=' && ipt.length() > 2) modified = false;
+				else readable = false;
+
+				if (readable)
+				{
+					//Check for use of only allowed characters
+					bool consta = true; //bool to prevent constants
+					for (int it = 2; it < ipt.length(); it++)
+					{
+						if (ipt[it] == 'a' || ipt[it] == 's') consta = false;
+						for (int a = 0; a < allowed.length(); a++)
+						{
+							if (ipt[it] == allowed[a])
+							{
+								if (ipt[it] == '+' || ipt[it] == '-' || ipt[it] == '*' || ipt[it] == '/')
+								{
+									if (a == allowed.length() - 1)
+									{
+										cout << "Cannot end funtion with an operator: " << ipt[it] << endl;
+										readable = false;
+									}
+									else if (ipt[it + 1] == '*' || ipt[it + 1] == '-' || ipt[it + 1] == '*' || ipt[it + 1] == '/')
+									{
+										cout << "Cannot have two operators next to eachother: " << ipt[it] << ipt[it + 1] << endl;
+										readable = false;
+									}
+								}
+								else if (ipt[it] == 'a' || ipt[it] == 's')
+								{
+									if (a != allowed.length() - 1 && (ipt[it + 1] == 'a' || ipt[it + 1] == 's' || ipt[it + 1] == '1' || 
+										ipt[it + 1] == '2' ||ipt[it + 1] == '3' || ipt[it + 1] == '4' || ipt[it + 1] == '5' || 
+										ipt[it + 1] == '6' || ipt[it + 1] == '7' || ipt[it + 1] == '8' || ipt[it + 1] == '9' || 
+										ipt[it + 1] == '0'))
+									{
+										cout << "Operator required between variables: " << ipt[it] << ipt[it + 1] << endl;
+										readable = false;
+									}
+								}
+								else
+								{
+									if (a != allowed.length() - 1 && (ipt[it + 1] == 'a' || ipt[it + 1] == 's'))
+									{
+										cout << "Operator required between variables: " << ipt[it] << ipt[it + 1] << endl;
+										readable = false;
+									}
+								}
+								form += ipt[it];
+								break;
+							}
+							else if (a == allowed.length() - 1)
+							{
+								cout << "Unknown Character: "<< ipt[it] << endl;
+								readable = false;
+							}
+						}
+						if (!readable) break;
+					}
+					if (readable && consta)
+					{
+						cout << "Constants not allowed, include variables (ex. 'x = x', 'x = x + 1')" << endl;
+						readable = false;
+					}
+				}
+
+				if (readable && !modified)
+				{
+					cout << "Speed Formula is now: " << form << " ... Now exiting to ROS Screen..." << endl;
+					spForm = form;
+					cont = false;
+				}
+				else if (readable && modified)
+				{
+					cout << "Altitude Formula is now: " << form << " ... Now exiting to ROS Screen..." << endl;
+					altForm = form;
+					cont = false;
+				}
+
+				if (!readable)
+				{
+					cout << "Unknown Input... type 'help' for options" << endl;
+					cont = true;
+				}
+			}
+		}
+		return true;
+	}
+
 	/* ----------- killCommand -----------
 	//Description: Function that distributes commands to the three main systems to safely shut down
 	//
@@ -388,7 +562,7 @@ public:
 				else if (i == 8) doNothing(); //left bumper
 				else if (i == 9) doNothing(); //right bumper
 				else if (i == 12) doNothing(); //start
-				else if (i == 13) doNothing(); //select
+				else if (i == 13) editTelemetryFormulas(); //select
 			}
 		}
 	}
