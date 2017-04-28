@@ -114,6 +114,10 @@ private:
 	string spForm = "t";
 	string altForm = "a";
 
+	/* -------Modified Telemetry------- */
+	double altitudeM = altitude;
+	double speedM = speed;
+
 	/* -------File Stream------- */
 	ofstream lf;
 
@@ -238,6 +242,9 @@ private:
 	*/
 	bool printTelemetry()
 	{
+		editTelemetry();
+
+		//Calculate Current Time
 		time_t n = time(0);
 		tm *t = localtime(&n);
 		int y = 1900 + t->tm_year;
@@ -247,10 +254,22 @@ private:
 		int mi = t->tm_min;
 		int s = t->tm_sec;
 
+		//Temp Unit
+		string de = "C";
+		if (tempMod) de = "F";
+		else de = "C";
+
+		//Height Unit
+		string he = "ft";
+		if (altMod) he = "m";
+		else he = "ft";
+
+		//Write to Log
 		lf.open(".\\log\\HOPPS_" + dte + ".csv", ios::out | ios::app);
 		lf << " Date:" << m << "/" << d << "/" << y << ",Time-" << h << ":" << mi << ":" << s
-			<< ",Altitude:" << altitude 
-			<< ",Speed:" << speed 
+			<< ",Altitude:" << altitudeM << "ft"
+			<< ",Speed:" << speedM 
+			<< ",Tempurature:" << temp << de
 			<< ",Gyro X-Axis:" << gyroX 
 			<< ",Gyro Y-Axis:" << gyroY 
 			<< ",Gyro Z-Axis:" << gyroZ 
@@ -273,10 +292,133 @@ private:
 	*/
 	bool editTelemetry()
 	{
+		//altitude
+		if (altForm == "a") altitudeM = altitude;
+		else
+		{
+			double v1 = 0;
+			double v2 = 0;
+			char op1 = '+';
+			char op2 = ' ';
+			int pos = 0;
+			string cur = "";
+
+			while (pos != altForm.length())
+			{
+				while (altForm[pos] != '*' && altForm[pos] != '/' && pos != altForm.length())
+				{
+					while (altForm[pos] != '+' && altForm[pos] != '-' && altForm[pos] != '*' && altForm[pos] != '/' && pos != altForm.length())
+					{
+						if (altForm[pos] == 'a' && op1 == '+') v1 += altitude;
+						else if (altForm[pos] == 's' && op1 == '+') v1 += speed;
+						else if (altForm[pos] == 'a' && op1 == '-') v1 -= altitude;
+						else if (altForm[pos] == 's' && op1 == '-') v1 -= speed;
+						else
+						{
+							cur += altForm[pos];
+
+							if (pos == altForm.length() - 1 || (pos != altForm.length() - 1 && (altForm[pos + 1] == '*' ||
+								altForm[pos + 1] == '/' || altForm[pos + 1] == '+' || altForm[pos + 1] == '-')))
+							{
+								if (op1 == '+') v1 += stod(cur);
+								else if (op1 == '-') v1 -= stod(cur);
+								cur = "";
+							}
+						}
+						pos++;
+					}
+					if (pos != altForm.length() && altForm[pos] == '+')
+					{
+						op1 = '+';
+						pos++;
+					}
+					else if (pos != altForm.length() && altForm[pos] == '-')
+					{
+						op1 = '-';
+						pos++;
+					}
+				}
+
+				op1 = '+';
+
+				if (pos != altForm.length() && altForm[pos] == '*')
+				{
+					op2 = '*';
+					pos++;
+				}
+				else if (pos != altForm.length() && altForm[pos] == '/')
+				{
+					op2 = '/';
+					pos++;
+				}
+
+				while (pos != altForm.length())
+				{
+					while (pos != altForm.length() && altForm[pos] != '+' && altForm[pos] != '-' && altForm[pos] != '*' && altForm[pos] != '/')
+					{
+						if (altForm[pos] == 'a' && op1 == '+') v2 += altitude;
+						else if (altForm[pos] == 's' && op1 == '+') v2 += speed;
+						else if (altForm[pos] == 'a' && op1 == '-') v2 -= altitude;
+						else if (altForm[pos] == 's' && op1 == '-') v2 -= speed;
+						else
+						{
+							cur += altForm[pos];
+
+							if (pos == altForm.length() - 1 || (pos != altForm.length() - 1 && (altForm[pos + 1] == '*' ||
+								altForm[pos + 1] == '/' || altForm[pos + 1] == '+' || altForm[pos + 1] == '-')))
+							{
+								if (op1 == '+') v2 += stod(cur);
+								else if (op1 == '-') v2 -= stod(cur);
+								cur = "";
+							}
+						}
+						pos++;
+					}
+					if (pos != altForm.length() && altForm[pos] == '+')
+					{
+						op1 = '+';
+						pos++;
+					}
+					else if (pos != altForm.length() && altForm[pos] == '-')
+					{
+						op1 = '-';
+						pos++;
+					}
+					else if (pos != altForm.length() && altForm[pos] == '*')
+					{
+						if (op2 == '*') v1 = v1 * v2;
+						else if (op2 == '/') v1 = v1 / v2;
+						v2 = 0;
+						op1 = '+';
+						op2 = '*';
+						pos++;
+					}
+					else if (pos != altForm.length() && altForm[pos] == '/')
+					{
+						if (op2 == '*') v1 = v1 * v2;
+						else if (op2 == '/') v1 = v1 / v2;
+						v2 = 0;
+						op1 = '+';
+						op2 = '/';
+						pos++;
+					}
+					else if (pos == altForm.length())
+					{
+						if (op2 == '*') v1 = v1 * v2;
+						else if (op2 == '/') v1 = v1 / v2;
+					}
+				}
+			}
+			altitudeM = v1;
+		}
+
+		//speed
+		if (spForm == "s") speedM = speed;
+
 		return true;
 	}
 
-	/* ----------- editTelemetry -----------
+	/* ----------- editTelemetryFormulas -----------
 	//Description: Function that allows user to specify commands in the command prompt to change telemetry modifications
 	//
 	//Inputs: N/A
@@ -289,6 +431,7 @@ private:
 		string ipt;
 		string allowed = "as01234567890+-*/";
 		bool cont = true;
+
 		cout << "\nWelcome to command line, type 'help' for a guide on how to use the command line. Type 'exit' to exit out of command line to resume normal operation." << endl;
 
 		while (cont)
