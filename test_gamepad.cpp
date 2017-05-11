@@ -48,6 +48,9 @@ bool debug = false;
 Gamepad gamepad;
 ifstream istrm("blah.txt", ios::binary);
 
+bool con = false; //UAS connectivity Tracking
+bool ctr = false; //Controller Connectivity Tracking
+
 class gui
 {
 private:
@@ -65,6 +68,19 @@ private:
 	}
 
 public:
+	/* ----------- updateGUI -----------
+	//Description: Function that pushes GUI updates
+	//
+	//Inputs: N/A
+	//
+	//Outputs:
+	// bool = complete(0=n, 1=y)
+	*/
+	bool updateGUI()
+	{
+		return true;
+	}
+	
 	/* ----------- createGUI -----------
 	//Description: Function that calls openGL and displays GUI
 	//
@@ -118,6 +134,16 @@ private:
 	double altitudeM = 0.0;
 	double speedM = 0.0;
 
+	/* -------Starting Altitude-------- */
+	double startAlt = -1;
+
+	/* -------Talon Control----------*/
+	bool isTalonClosed = false;
+	double cageHeight = -1;
+
+	/* -------Kill Command Control-------*/
+	bool isKilling = false;
+
 	/* -------File Stream------- */
 	ofstream lf;
 
@@ -148,7 +174,7 @@ private:
 	//	0 = axis
 	//	1 = trigger
 	//  2 = bumper
-	// i (double) = intensity
+	// i (double) = intensity (positive or negative)
 	// dx (double) = x-axis directionality
 	// dy (double) = y-axis directionality
 	//
@@ -157,6 +183,31 @@ private:
 	*/
 	bool fSystemController(int b, double i, double dx, double dy)
 	{
+		if (b == 0 && dx > 0.2)
+		{
+			cout << "TILT RIGHT" << endl;
+		}
+		else if (b == 0 && dx < -0.2)
+		{
+			cout << "TILT LEFT" << endl;
+		}
+		if (b == 0 && dy > 0.2)
+		{
+			cout << "TILT UP" << endl;
+		}
+		else if (b == 0 && dy < -0.2)
+		{
+			cout << "TILT DOWN" << endl;
+		}
+
+		if (b == 1 && i > 0.2)
+		{
+			cout << "ACCELERATE" << endl;
+		}
+		else if (b == 1 && i < -0.2)
+		{
+			cout << "DECELERATE" << endl;
+		}
 		return true;
 	}
 
@@ -173,6 +224,10 @@ private:
 	*/
 	bool mSystemTalon(int t)
 	{
+		if (t == 0)
+		{
+			if (cageHeight == -1) cageHeight = altitude - startAlt;
+		}
 		return true;
 	}
 
@@ -416,7 +471,7 @@ private:
 		return true;
 	}
 
-	/* ----------- editTelemetryFormulas -----------
+	/* ----------- editTelemetryFormulas (Command Line) -----------
 	//Description: Function that allows user to specify commands in the command prompt to change telemetry modifications
 	//
 	//Inputs: N/A
@@ -460,6 +515,7 @@ private:
 				cout << "Type 'fahrenheit' to change to fahrenheit tempurature readings." << endl;
 				cout << "Type 'meters' to change to meters altitude readings." << endl;
 				cout << "Type 'feet' to change to feet altitude readings." << endl;
+				cout << "Type 'cageheight' to set known cage height (Otherwise estimated on pickup)." << endl;
 				cout << "\nTo change telemetry forumlas, use complete forumlas such as 'x = x * 10'" << endl;
 				cout << "Variables to change:\n 'a' = altitude\n 's' = speed" << endl;
 				cont = true;
@@ -468,6 +524,7 @@ private:
 			{
 				cout << "Temp forumla changed to Celsius. Now exiting to ROS Screen..." << endl;
 				tempMod = false;
+
 				cont = false;
 			}
 			else if (ipt == "fahrenheit")
@@ -479,13 +536,33 @@ private:
 			else if (ipt == "feet")
 			{
 				cout << "Altitude formula changed to Feet. Now exiting to ROS Screen..." << endl;
+				if (altMod)
+				{
+					startAlt = startAlt / 0.3048;
+					cageHeight = cageHeight / 0.3048;
+				}
 				altMod = false;
 				cont = false;
 			}
 			else if (ipt == "meters")
 			{
 				cout << "Altitude changed to Meters. Now exiting to ROS Screen..." << endl;
+				if (!altMod)
+				{
+					startAlt = startAlt * 0.3048;
+					cageHeight = cageHeight * 0.3048;
+				}
 				altMod = true;
+				cont = false;
+			}
+			else if (ipt == "cageheight")
+			{
+				string he = "feet";
+				if (altMod) he = "meters";
+				else he = "feet";
+
+				cout << "Please Enter the Cage height in " << he << endl;
+
 				cont = false;
 			}
 			else
@@ -593,6 +670,16 @@ private:
 	*/
 	bool killCommand()
 	{
+		double i = 0.0;
+		double g = 20; // Set variable to start decreasing speed
+
+		if (!altMod) g = g * 0.3048;
+
+		if (isTalonClosed) i = -1 * ((altitude - startAlt - cageHeight) / g);
+		else i = -1 * ((altitude - startAlt) / g);
+
+		fSystemController(1, i, 0, 0);
+		
 		return true;
 	}
 
@@ -622,6 +709,39 @@ private:
 		return true;
 	}
 
+	/* ----------- updateTelemetry -----------
+	//Description: Function that takes in received telemtry data and applies to private variables
+	//
+	//Inputs: N/A
+	//
+	//Outputs:
+	// bool = complete(0=n, 1=y)
+	*/
+	bool updateTelemetry(double a, double t, double s, double gx, 
+		double gy, double gz, double s1, double s2, double s3, double s4)
+	{
+		/* -------Telemetry Data------- */
+		speed = s;
+		gyroX = gx;
+		gyroY = gy;
+		gyroZ = gz;
+		sensor1 = s1;
+		sensor2 = s2;
+		sensor3 = s3;
+		sensor4 = s4;
+
+		/* ----Telemetry Modifiers--- */
+		if (tempMod) temp = t;
+		else temp = (t - 32) / 1.8;
+
+		if (!altMod) altitude = a;
+		else altitude = a * 0.3048;
+
+		if (startAlt == -1) startAlt = altitude;
+
+		return true;
+	}
+
 
 public:
 
@@ -634,6 +754,11 @@ public:
 	*/
 	void uInputHandler()
 	{
+		//Update Internal variables with received telemetry data
+		updateTelemetry(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+		if (isKilling) killCommand();
+
 		//Print to the log every 5 seconds
 		time_t n = time(0);
 		tm *t = localtime(&n);
@@ -654,56 +779,60 @@ public:
 	*/
 	void controllerHandler()
 	{
-		if (debug) cout << "Gamepad state has changed" << endl;
-
-		// Print out states of left thumbstick
-		if (!gamepad.leftStickInDeadzone())
+		if (!isKilling)
 		{
-			if (debug) cout << "Left thumbstick x: " << gamepad.leftStick_x() << endl;
-			if (debug) cout << "Left thumbstick y: " << gamepad.leftStick_y() << endl;
-			fSystemController(0, 0, gamepad.leftStick_x(), gamepad.leftStick_y());
-		}
-		else
-			if (debug) cout << "Left thumbstick in deadzone" << endl;
+			if (debug) cout << "Gamepad state has changed" << endl;
 
-		// Print out states of right thumbstick
-		if (!gamepad.rightStickInDeadzone())
-		{
-			if (debug) cout << "Right thumbstick x: " << gamepad.rightStick_x() << endl;
-			if (debug) cout << "Right thumbstick y: " << gamepad.rightStick_y() << endl;
-			
-			if (gamepad.rightStick_y() > 0) mSystemGimble(1, gamepad.rightStick_y());
-			else if (gamepad.rightStick_y() < 0) mSystemGimble(0, -1 * gamepad.rightStick_y());
-			fSystemController(2, 0, gamepad.rightStick_x(), 0);
-		}
-		else
-			if (debug) cout << "Right thumbstick in deadzone" << endl;
-
-		// Print out states of triggers
-		if (debug) cout << "Left trigger: " << gamepad.leftTrigger() << endl;
-		if (debug) cout << "Right trigger: " << gamepad.rightTrigger() << endl;
-		double intensity = 0 + gamepad.rightTrigger() - gamepad.leftTrigger();
-		fSystemController(1, intensity, 0, 0);
-
-		// Print out states of all buttons
-		for (int i = 0; i < 14; i++)
-		{
-			int iValue = (gamepad.getButtonPressed(i) ? 1 : 0);
-			if (debug) cout << "Button ID " << i << ": " << iValue << endl;
-			if (iValue == 1)
+			// Print out states of left thumbstick
+			if (!gamepad.leftStickInDeadzone())
 			{
-				if (i == 0) mSystemTalon(0); //a
-				else if (i == 1) killCommand(); //b
-				else if (i == 2) mSystemTalon(1); //x
-				else if (i == 3) doNothing(); //y
-				else if (i == 4) mSystemCamera(); //d-pad up
-				else if (i == 5) doNothing(); //d-pad down
-				else if (i == 6) cageCaptureAssist(); //d-pad left
-				else if (i == 7) cageLandAssist(); //d-pad right
-				else if (i == 8) doNothing(); //left bumper
-				else if (i == 9) doNothing(); //right bumper
-				else if (i == 12) doNothing(); //start
-				else if (i == 13) editTelemetryFormulas(); //select
+				if (debug) cout << "Left thumbstick x: " << gamepad.leftStick_x() << endl;
+				if (debug) cout << "Left thumbstick y: " << gamepad.leftStick_y() << endl;
+				fSystemController(0, 0, gamepad.leftStick_x(), gamepad.leftStick_y());
+			}
+			else
+				if (debug) cout << "Left thumbstick in deadzone" << endl;
+
+			// Print out states of right thumbstick
+			if (!gamepad.rightStickInDeadzone())
+			{
+				if (debug) cout << "Right thumbstick x: " << gamepad.rightStick_x() << endl;
+				if (debug) cout << "Right thumbstick y: " << gamepad.rightStick_y() << endl;
+
+				if (gamepad.rightStick_y() > 0) { mSystemGimble(1, gamepad.rightStick_y()); cout << "MOVE CAMERA UP" << endl; }
+				else if (gamepad.rightStick_y() < 0) { mSystemGimble(0, -1 * gamepad.rightStick_y()); cout << "MOVE CAMERA DOWN" << endl; }
+				fSystemController(2, 0, gamepad.rightStick_x(), 0);
+			}
+			else
+				if (debug) cout << "Right thumbstick in deadzone" << endl;
+
+			// Print out states of triggers
+			if (debug) cout << "Left trigger: " << gamepad.leftTrigger() << endl;
+			if (debug) cout << "Right trigger: " << gamepad.rightTrigger() << endl;
+			double intensity = 0 + gamepad.rightTrigger() - gamepad.leftTrigger();
+
+			if (gamepad.leftTrigger() > 0.0 || gamepad.rightTrigger() > 0.0) fSystemController(1, intensity, 0, 0);
+
+			// Print out states of all buttons
+			for (int i = 0; i < 14; i++)
+			{
+				int iValue = (gamepad.getButtonPressed(i) ? 1 : 0);
+				if (debug) cout << "Button ID " << i << ": " << iValue << endl;
+				if (iValue == 1)
+				{
+					if (i == 0) { mSystemTalon(0); cout << "CLOSE TALON" << endl; } //a
+					else if (i == 1) { killCommand(); cout << "KILL COMMAND" << endl; isKilling = true; }//b
+					else if (i == 2) { mSystemTalon(1); cout << "OPEN TALON" << endl; } //x
+					else if (i == 3) doNothing(); //y
+					else if (i == 4) { mSystemCamera(); cout << "SWITCH CAMERAS" << endl; } //d-pad up
+					else if (i == 5) doNothing(); //d-pad down
+					else if (i == 6) { cageCaptureAssist(); cout << "CAGE CAPTURE ASSIST" << endl; } //d-pad left
+					else if (i == 7) { cageLandAssist(); cout << "CAGE LAND ASSIST" << endl; } //d-pad right
+					else if (i == 8) doNothing(); //left bumper
+					else if (i == 9) doNothing(); //right bumper
+					else if (i == 12) doNothing(); //start
+					else if (i == 13) { editTelemetryFormulas(); cout << "OPEN CMD LINE" << endl; } //select
+				}
 			}
 		}
 	}
@@ -712,34 +841,54 @@ public:
 int main()
 {
 	prgm m;
+	gui g;
 
 	//Make log directory
 	mkdir(".\\log");
 
-	// Wait for gamepad to be connected
-	while (!gamepad.connected())
-	{
-		cout << "Gamepad Not Connected..." << endl;
-		Sleep(1000);
-	}
-
-	while (false)
-	{
-		cout << "UAS Not Connected..." << endl;
-		Sleep(1000);
-	}
-
-	if (debug) cout << "Gamepad " << gamepad.getIndex() << " connected" << endl;
+	//Make GUI
+	g.createGUI();
 
 	// Main loop
 	while (true)
 	{
+		// Wait for gamepad to be connected if not
+		while (!gamepad.connected())
+		{
+			ctr = false;
+			g.updateGUI();
+			cout << "Gamepad Not Connected..." << endl;
+			Sleep(1000);
+		}
+		if (gamepad.connected() && !ctr)
+		{
+			if (debug) cout << "Gamepad " << gamepad.getIndex() << " connected" << endl;
+			else cout << "Gamepad Connected!" << endl;
+			ctr = true;
+		}
+
+		// Wait for UAS to be connected if not
+		while (false)
+		{
+			con = false;
+			g.updateGUI();
+			cout << "UAS Not Connected..." << endl;
+			Sleep(1000);
+		}
+		if (!con)
+		{
+			cout << "UAS Connected!" << endl;
+			con = true;
+		}
+
 		// Check Controller status, if used send out commands
 		gamepad.update();
 		if (gamepad.hasChanged()) m.controllerHandler();
 
 		// Distribute UAS input
 		m.uInputHandler();
+
+		g.updateGUI();
 
 		Sleep(100);
 	}
