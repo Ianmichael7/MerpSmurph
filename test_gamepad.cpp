@@ -43,6 +43,12 @@ struct uDataOutput
 	int uData;
 };
 
+struct animal
+{
+	string name;
+	int state = 0;
+} animals[12];
+
 //GLOBAL VARIABLES
 bool debug = false;
 Gamepad gamepad;
@@ -76,7 +82,7 @@ public:
 	//Outputs:
 	// bool = complete(0=n, 1=y)
 	*/
-	bool updateGUI()
+	bool updateGUI(int q = 0)
 	{
 		return true;
 	}
@@ -742,6 +748,63 @@ private:
 		return true;
 	}
 
+	/* ----------- updateQueue -----------
+	//Description: Function that allows user to update the queue
+	//
+	//Inputs: N/A
+	//
+	//Outputs:
+	// bool = complete(0=n, 1=y)
+	*/
+	bool updateQueue(gui g)
+	{
+		int q = 0;
+
+		while (!isKilling)
+		{
+			while (!gamepad.connected())
+			{
+				ctr = false;
+				g.updateGUI(q);
+				cout << "Gamepad Not Connected..." << endl;
+				Sleep(1000);
+			}
+			if (gamepad.connected() && !ctr)
+			{
+				if (debug) cout << "Gamepad " << gamepad.getIndex() << " connected" << endl;
+				else cout << "Gamepad Connected!" << endl;
+				ctr = true;
+			}
+
+			// Print out states of right thumbstick
+			if (!gamepad.rightStickInDeadzone())
+			{
+				if (gamepad.rightStick_y() > 0) q--;
+				else if (gamepad.rightStick_y() < 0) q++;
+			}
+
+			if ((gamepad.getButtonPressed(1) ? 1 : 0) == 1) { killCommand(); cout << "KILL COMMAND" << endl; isKilling = true; } //b
+			else if ((gamepad.getButtonPressed(4) ? 1 : 0) == 1) q--; //d-pad up
+			else if ((gamepad.getButtonPressed(5) ? 1 : 0) == 1) q++; //d-pad down
+
+			if (q == -1) q = 11;
+			else if (q == 12) q = 0;
+
+			if ((gamepad.getButtonPressed(1) ? 1 : 0) == 1) //a
+			{
+				if (animals[q].state == 0) animals[q].state = 1; // Safe to Danger
+				if (animals[q].state == 1) animals[q].state = 2; // Danger to Rescued
+				if (animals[q].state == 2) animals[q].state = 3; // Rescued to N/A
+				if (animals[q].state == 3) animals[q].state = 0; // N/A to Safe
+			}
+
+			g.updateGUI(q); //MAY CAUSE ERRORS ON RUNTIME - IF ERRORS CHECK BACK HERE
+
+			Sleep(100);
+		}
+		return true;
+	}
+
 
 public:
 
@@ -777,7 +840,7 @@ public:
 	//
 	//Outputs: N/A
 	*/
-	void controllerHandler()
+	void controllerHandler(gui g)
 	{
 		if (!isKilling)
 		{
@@ -823,7 +886,7 @@ public:
 					if (i == 0) { mSystemTalon(0); cout << "CLOSE TALON" << endl; } //a
 					else if (i == 1) { killCommand(); cout << "KILL COMMAND" << endl; isKilling = true; }//b
 					else if (i == 2) { mSystemTalon(1); cout << "OPEN TALON" << endl; } //x
-					else if (i == 3) doNothing(); //y
+					else if (i == 3) { updateQueue(g); cout << "UPDATE QUEUE" << endl; } //y
 					else if (i == 4) { mSystemCamera(); cout << "SWITCH CAMERAS" << endl; } //d-pad up
 					else if (i == 5) doNothing(); //d-pad down
 					else if (i == 6) { cageCaptureAssist(); cout << "CAGE CAPTURE ASSIST" << endl; } //d-pad left
@@ -848,6 +911,12 @@ int main()
 
 	//Make GUI
 	g.createGUI();
+
+	//Populate Animal Queue
+	animals[0].name = "Elephant (P1)"; animals[1].name = "Gorilla (P1)"; animals[2].name = "Rhinoceros (P1)";
+	animals[3].name = "Tiger (P2)"; animals[4].name = "Panda (P2)"; animals[5].name = "Giraffe (P3)";
+	animals[6].name = "Lion (P3)"; animals[7].name = "Cheetah (P3)"; animals[8].name = "Zebra (P4)";
+	animals[9].name = "Moose (P4)"; animals[10].name = "Warthog (P4)"; animals[11].name = "Hippo (P4)";
 
 	// Main loop
 	while (true)
@@ -883,7 +952,7 @@ int main()
 
 		// Check Controller status, if used send out commands
 		gamepad.update();
-		if (gamepad.hasChanged()) m.controllerHandler();
+		if (gamepad.hasChanged()) m.controllerHandler(g);
 
 		// Distribute UAS input
 		m.uInputHandler();
