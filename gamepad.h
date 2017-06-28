@@ -49,7 +49,7 @@ public:
 	Gamepad();
 	Gamepad(int iIndex);
 
-	void update(); // Update gamepad state
+	bool update(); // Update gamepad state
 	void refreshState(); // Update button states for next frame
 
 						 // Analog stick functions
@@ -84,7 +84,9 @@ private:
 
 	static const int buttonCount = 14; // Total gamepad buttons
 	bool bPrevButtonStates[buttonCount]; // Previous frame button states
+	bool bPrev2ButtonStates[buttonCount]; // Previous x2 frame button states
 	bool bButtonStates[buttonCount]; // Current frame button states
+	bool curButtonStates[buttonCount]; // Current frame button states
 
 									 // Buttons pressed on current frame
 	bool bGamepadButtonsDown[buttonCount];

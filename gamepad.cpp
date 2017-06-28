@@ -1,10 +1,13 @@
 #include <windows.h>
 #include <iostream>
 #include "stdafx.h"
+#include <ctime>
 #include "gamepad.h"
 
 #define SHORT_MAX_AS_FLOAT 32768.0f
 #define BYTE_MAX_AS_FLOAT 255.0f
+
+bool hasChange = false;
 
 // Link the 'Xinput' library
 #pragma comment(lib, "Xinput.lib")
@@ -55,7 +58,7 @@ Gamepad::Gamepad(int iIndex)
 }
 
 // Update gamepad state
-void Gamepad::update()
+bool Gamepad::update()
 {
 	dwPacketNumberPrev = m_State.dwPacketNumber; // save off the previous state number
 	m_State = getState(); // obtain current gamepad state
@@ -63,11 +66,20 @@ void Gamepad::update()
 	for (int i = 0; i < buttonCount; i++)
 	{
 		// Set button state for current frame
+		bPrev2ButtonStates[i] = bPrevButtonStates[i];
 		bButtonStates[i] = (m_State.Gamepad.wButtons & XINPUT_Buttons[i]) == XINPUT_Buttons[i];
+
+		//std::cout << i << ":  " << bPrevButtonStates[i] << "-" << bButtonStates[i] << "\n";
+
+		if (bPrevButtonStates[i] != bButtonStates[i] && bButtonStates[i] == 1) hasChange = true;
 
 		// Set DOWN state for current frame
 		bGamepadButtonsDown[i] = !bPrevButtonStates[i] && bButtonStates[i];
+		bPrevButtonStates[i] = curButtonStates[i] = bButtonStates[i];
 	}
+
+	if (!rightStickInDeadzone() || !leftStickInDeadzone() || rightTrigger() > 0 || leftTrigger() > 0) hasChange = true;
+	return hasChange;
 }
 
 // Update button states for next frame
@@ -181,9 +193,8 @@ float Gamepad::rightTrigger()
 // Return true if button is pressed, false if not
 bool Gamepad::getButtonPressed(int iButton)
 {
-	if (m_State.Gamepad.wButtons & XINPUT_Buttons[iButton])
+	if (curButtonStates[iButton] == 1 && curButtonStates[iButton] != bPrev2ButtonStates[iButton])
 		return true;
-
 	return false;
 }
 
@@ -233,7 +244,12 @@ bool Gamepad::connected()
 // Return true if gamepad state has changed
 bool Gamepad::hasChanged()
 {
-	return (dwPacketNumberPrev != m_State.dwPacketNumber);
+	if (hasChange)
+	{
+		hasChange = false;
+		return true;
+	}
+	return false;
 }
 
 // Zero the button arrays
