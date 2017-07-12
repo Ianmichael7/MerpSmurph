@@ -3,8 +3,8 @@ import picamera
 import time 
 import wiringpi
 import ivport
-
-
+import threading
+from PIL import Image
 
 GPIO.setmode(GPIO.BCM)            # choose BCM or BOARD  
 GPIO.setup(pin, GPIO.IN)  		  # set a port/pin as an input  
@@ -109,9 +109,14 @@ class tempThread (threading.Thread):
         self.pin = pin
     def run(self):
         print "Starting " + self.name
+        
         while True:
         	temp = GPIO.input(self.pin)
 			camera.annotate_text = temp
+			for i in range(img.size[1]):    # for every col:
+    			for j in range(img.size[0]):    # For every row
+        			pixels[i,j] = (temp, altitude, UltraSonic) # set the colour accordingly
+        	
         print "Exiting " + self.name
 
 class usThread (threading.Thread):
@@ -134,6 +139,8 @@ class usThread (threading.Thread):
         print "Exiting " + self.name
 try:  
 	command = 0
+	img = Image.new( 'RGB', (100,250), "black") # create a new black image
+	pixels = img.load() # create the pixel map
 	# Create new threads
 	tempthread1 = tempThread(1, "Thread-Temperature", pin)	#replace pin with tempsensor gpio pin
 	usthread1 = usThread(2, "Thread-Ultrasonic Sensor 1", 1)
@@ -147,7 +154,7 @@ try:
 	usthread3.start()
 	usthread4.start()
 	camera.start_preview()
-
+	img.show()
     while True:            # this will carry on until you hit CTRL+C  
         
         command = recieveCommands()   	# Get commands
